@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Juego de la Serpiente</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Arial', sans-serif;
+            color: white;
+        }
+        
+        .container {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        }
+        
+        h1 {
+            margin-bottom: 20px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .info {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+        
+        .score, .highscore {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 10px 20px;
+            border-radius: 10px;
+        }
+        
+        canvas {
+            border: 4px solid white;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            background: #1a1a2e;
+        }
+        
+        .controls {
+            margin-top: 20px;
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+        
+        .game-over {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+        }
+        
+        .game-over.show {
+            display: block;
+        }
+        
+        .game-over h2 {
+            font-size: 2.5em;
+            margin-bottom: 20px;
+            color: #ff6b6b;
+        }
+        
+        .game-over button {
+            background: #4ecdc4;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2em;
+            border-radius: 10px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: all 0.3s;
+        }
+        
+        .game-over button:hover {
+            background: #45b7aa;
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🐍 Serpiente</h1>
+        <div class="info">
+            <div class="score">Puntuación: <span id="score">0</span></div>
+            <div class="highscore">Récord: <span id="highscore">0</span></div>
+        </div>
+        <canvas id="gameCanvas" width="400" height="400"></canvas>
+        <div class="controls">
+            Usa las flechas del teclado ⬆️ ⬇️ ⬅️ ➡️ para moverte
+        </div>
+    </div>
+    
+    <div class="game-over" id="gameOver">
+        <h2>¡Juego Terminado!</h2>
+        <p style="font-size: 1.5em; margin: 10px 0;">Puntuación: <span id="finalScore">0</span></p>
+        <button onclick="resetGame()">Jugar de Nuevo</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const highscoreElement = document.getElementById('highscore');
+        const gameOverElement = document.getElementById('gameOver');
+        const finalScoreElement = document.getElementById('finalScore');
+        
+        const gridSize = 20;
+        const tileCount = canvas.width / gridSize;
+        
+        let snake = [{x: 10, y: 10}];
+        let velocity = {x: 0, y: 0};
+        let food = {x: 15, y: 15};
+        let score = 0;
+        let highscore = 0;
+        let gameRunning = true;
+        let gameSpeed = 100;
+        
+        function drawGame() {
+            if (!gameRunning) return;
+            
+            // Mover serpiente
+            moveSnake();
+            
+            // Limpiar canvas
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Dibujar cuadrícula
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            for (let i = 0; i < tileCount; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * gridSize, 0);
+                ctx.lineTo(i * gridSize, canvas.height);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, i * gridSize);
+                ctx.lineTo(canvas.width, i * gridSize);
+                ctx.stroke();
+            }
+            
+            // Dibujar comida
+            ctx.fillStyle = '#ff6b6b';
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#ff6b6b';
+            ctx.fillRect(food.x * gridSize, food.y * gridSize, gridSize - 2, gridSize - 2);
+            ctx.shadowBlur = 0;
+            
+            // Dibujar serpiente
+            snake.forEach((segment, index) => {
+                if (index === 0) {
+                    ctx.fillStyle = '#4ecdc4';
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = '#4ecdc4';
+                } else {
+                    ctx.fillStyle = '#95e1d3';
+                    ctx.shadowBlur = 0;
+                }
+                ctx.fillRect(segment.x * gridSize, segment.y * gridSize, gridSize - 2, gridSize - 2);
+            });
+            
+            ctx.shadowBlur = 0;
+            
+            // Verificar colisiones
+            checkCollision();
+            
+            setTimeout(drawGame, gameSpeed);
+        }
+        
+        function moveSnake() {
+            if (velocity.x === 0 && velocity.y === 0) return;
+            
+            const head = {
+                x: snake[0].x + velocity.x,
+                y: snake[0].y + velocity.y
+            };
+            
+            snake.unshift(head);
+            
+            // Verificar si come comida
+            if (head.x === food.x && head.y === food.y) {
+                score++;
+                scoreElement.textContent = score;
+                if (score > highscore) {
+                    highscore = score;
+                    highscoreElement.textContent = highscore;
+                }
+                placeFood();
+                
+                // Aumentar velocidad gradualmente
+                if (gameSpeed > 50) {
+                    gameSpeed -= 2;
+                }
+            } else {
+                snake.pop();
+            }
+        }
+        
+        function placeFood() {
+            food.x = Math.floor(Math.random() * tileCount);
+            food.y = Math.floor(Math.random() * tileCount);
+            
+            // Asegurar que la comida no aparezca sobre la serpiente
+            for (let segment of snake) {
+                if (segment.x === food.x && segment.y === food.y) {
+                    placeFood();
+                    return;
+                }
+            }
+        }
+        
+        function checkCollision() {
+            const head = snake[0];
+            
+            // Colisión con paredes
+            if (head.x < 0 || head.x >= tileCount || head.y < 0 || head.y >= tileCount) {
+                endGame();
+                return;
+            }
+            
+            // Colisión con cuerpo
+            for (let i = 1; i < snake.length; i++) {
+                if (head.x === snake[i].x && head.y === snake[i].y) {
+                    endGame();
+                    return;
+                }
+            }
+        }
+        
+        function endGame() {
+            gameRunning = false;
+            finalScoreElement.textContent = score;
+            gameOverElement.classList.add('show');
+        }
+        
+        function resetGame() {
+            snake = [{x: 10, y: 10}];
+            velocity = {x: 0, y: 0};
+            score = 0;
+            scoreElement.textContent = score;
+            gameSpeed = 100;
+            gameRunning = true;
+            gameOverElement.classList.remove('show');
+            placeFood();
+            drawGame();
+        }
+        
+        // Controles
+        document.addEventListener('keydown', (e) => {
+            switch(e.key) {
+                case 'ArrowUp':
+                    if (velocity.y === 0) {
+                        velocity = {x: 0, y: -1};
+                    }
+                    e.preventDefault();
+                    break;
+                case 'ArrowDown':
+                    if (velocity.y === 0) {
+                        velocity = {x: 0, y: 1};
+                    }
+                    e.preventDefault();
+                    break;
+                case 'ArrowLeft':
+                    if (velocity.x === 0) {
+                        velocity = {x: -1, y: 0};
+                    }
+                    e.preventDefault();
+                    break;
+                case 'ArrowRight':
+                    if (velocity.x === 0) {
+                        velocity = {x: 1, y: 0};
+                    }
+                    e.preventDefault();
+                    break;
+            }
+        });
+        
+        // Iniciar juego
+        drawGame();
+    </script>
+</body>
+</html>
